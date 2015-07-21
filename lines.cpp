@@ -2,10 +2,12 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <memory.h>
+#include <math.h>
 #include "doomlib.h"
 #include "vec2.h"
 #include "box2.h"
 #include "plane2.h"
+#include "polygon.h"
 
 float globalepsilon = 0.2f;
 
@@ -276,7 +278,7 @@ static void DumpVertices(int lumpnum)
 		vertices[i][0] = xy[0];
 		vertices[i][1] = xy[1];
 
-		//printf("vertex %4i: %12.4f, %12.4f\n", i, xy[0], xy[1]);
+		printf("vertex %4i: %12.4f, %12.4f\n", i, xy[0], xy[1]);
 	}
 }
 
@@ -322,7 +324,7 @@ static void DumpMapData(const char *mapname)
 }
 
 // ______________________________________________
-// bsp
+// bsp tree
 
 // nodes
 typedef struct bspnode_s
@@ -349,6 +351,8 @@ typedef struct bsptree_s
 	
 	bspnode_t	*root;
 	bspnode_t	*leafs;
+
+	plane_t		plane;
 	
 } bsptree_t;
 
@@ -498,6 +502,9 @@ void BuildTreeRecursive(bsptree_t *tree, bspnode_t *node, bspline_t *lines)
 
 	if (!lines)
 	{
+		node->leafnext = tree->leafs;
+		tree->leafs = node;
+
 		tree->numleafs++;
 		return;
 	}
@@ -566,6 +573,123 @@ bsptree_t *BuildTree()
 	return tree;
 }
 
+// ______________________________________________
+// drawing
+
+static void HSVToRGB(float rgb[3], float h, float s, float v)
+{
+	float r, g, b;
+	
+	int i = floor(h * 6);
+	float f = h * 6 - i;
+	float p = v * (1 - s);
+	float q = v * (1 - f * s);
+	float t = v * (1 - (1 - f) * s);
+	
+	switch(i % 6)
+	{
+		case 0: r = v, g = t, b = p; break;
+		case 1: r = q, g = v, b = p; break;
+		case 2: r = p, g = v, b = t; break;
+		case 3: r = p, g = q, b = v; break;
+		case 4: r = t, g = p, b = v; break;
+		case 5: r = v, g = p, b = q; break;
+	}
+	
+	rgb[0] = r;
+	rgb[1] = g;
+	rgb[2] = b;
+}
+
+polygon_t *MakeFullPolygon()
+{
+	polygon_t *p = Polygon_Alloc(4);
+	float s = 16384.0f;
+
+	p->vertices[0][0]	=  -s;
+	p->vertices[0][1]	=  -s;
+	p->vertices[1][0]	=   s;
+	p->vertices[1][1]	=  -s;
+	p->vertices[2][0]	=   s;
+	p->vertices[2][1]	=   s;
+	p->vertices[3][0]	=  -s;
+	p->vertices[3][1]	=   s;
+	p->numvertices		= 4;
+
+	return p;
+}
+
+// wind up to the root then clip on unwind
+polygon_t *ClipPolygonIntoLeafRecursive(polygon_t *p, bspnode_t *node, bspnode_t *prev)
+{
+	if (!node)
+		return p;
+	
+	p = ClipPolygonIntoLeafRecursive(p, node->parent, node);
+	
+	// the result of the previous clip might have completely clipped the polygon
+	if (!p)
+		return NULL;
+	
+	// have to special case this as side on will clip the polygon
+	if (Polygon_OnPlaneSide(p, node->plane, globalepsilon) == PLANE_SIDE_ON)
+		return p;
+	
+	// flip the plane if we followed the back link to get here
+	plane_t plane = node->plane;
+	if (node->children[1] == prev)
+		plane = -plane;
+	
+	// clip the polygon with the current leaf plane
+	return Polygon_ClipWithPlane(p, plane, globalepsilon);
+	
+	return p;
+}
+
+polygon_t *MakeLeafPolygon(bspnode_t *leaf)
+{
+	polygon_t *p = MakeFullPolygon();
+
+	p = ClipPolygonIntoLeafRecursive(p, leaf, NULL);
+
+	return p;
+}
+
+void BuildLeafPolygons(bsptree_t *tree)
+{
+	bspnode_t *leaf;
+
+	FILE *fp = fopen("leaf_polygons.gld", "w");
+
+	int leafnum = 0;
+	for(leaf = tree->leafs; leaf; leaf = leaf->leafnext)
+	{
+		polygon_t *p = MakeLeafPolygon(leaf);
+
+		//fprintf(fp, "color 1 0 0 1\n");
+		float rgb[3];
+		HSVToRGB(rgb, (float)leafnum / tree->numleafs, 1.0f, 1.0f);
+		fprintf(fp, "color %f %f %f 1\n", rgb[0], rgb[1], rgb[2]);
+
+		fprintf(fp, "polyline\n");
+		fprintf(fp, "%i\n", p->numvertices + 1);
+
+		for(int i = 0; i < p->numvertices + 1; i++)
+		{
+			//vec3 v =
+			//	center + (0.95f * (p->polygon->vertices[i % p->polygon->numvertices] - center));
+			vec2 v = p->vertices[i % p->numvertices];
+
+			fprintf(fp, "%f %f 0\n",
+					v[0],
+					v[1]);
+		}
+		fflush(fp);
+	}
+
+	fclose(fp);
+}
+
 static void PrintUsage()
 {
 	printf("dumplvl <wadfile> <mapname>\n");
@@ -590,6 +714,8 @@ int main(int argc, const char * argv[])
 	printf("numlinedefs %i\n", numlinedefs);
 	printf("numnodes %i\n", tree->numnodes);
 	printf("numleafs %i\n", tree->numleafs);
+
+	//BuildLeafPolygons(tree);
 	
 	return 0;
 }
