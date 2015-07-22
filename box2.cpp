@@ -23,7 +23,7 @@ bool box2::InsideOut()
 
 void box2::AddPoint(vec2 p)
 {
-	for (int i = 0; i < 3; i++)
+	for (int i = 0; i < 2; i++)
 	{
 		if (p[i] < min[i])
 			min[i] = p[i];
