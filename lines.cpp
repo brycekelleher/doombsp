@@ -142,7 +142,7 @@ void Line_SplitWithPlane(line_t *l, plane_t plane, float epsilon, line_t **f, li
 	sides[1] = Plane_PointOnPlaneSide(plane, l->v[1], epsilon);
 
 	// both points are on the plane
-	if (sides[0] == PLANE_SIDE_ON && sides[0] == PLANE_SIDE_ON)
+	if (sides[0] == PLANE_SIDE_ON && sides[1] == PLANE_SIDE_ON)
 	{
 		*f = NULL;
 		*b = NULL;
@@ -278,7 +278,7 @@ static void DumpVertices(int lumpnum)
 		vertices[i][0] = xy[0];
 		vertices[i][1] = xy[1];
 
-		printf("vertex %4i: %12.4f, %12.4f\n", i, xy[0], xy[1]);
+		//printf("vertex %4i: %12.4f, %12.4f\n", i, xy[0], xy[1]);
 	}
 }
 
@@ -438,12 +438,12 @@ static int CalculateSplitPlaneScore(plane_t plane, bspline_t *list)
 	{
 		// favour polygons that don't cause splits
 		int side = Line_OnPlaneSide(list->line, plane, globalepsilon);
-		if(side != PLANE_SIDE_ON && side != PLANE_SIDE_CROSS)
+		if(side != PLANE_SIDE_CROSS)
 			score += 1;
 		
 		// favour planes which are axial
-		if(plane.IsAxial())
-			score += 1;
+		//if(plane.IsAxial())
+		//	score += 1;
 	}
 	
 	return score;
@@ -632,8 +632,8 @@ polygon_t *ClipPolygonIntoLeafRecursive(polygon_t *p, bspnode_t *node, bspnode_t
 		return NULL;
 	
 	// have to special case this as side on will clip the polygon
-	if (Polygon_OnPlaneSide(p, node->plane, globalepsilon) == PLANE_SIDE_ON)
-		return p;
+	//if (Polygon_OnPlaneSide(p, node->plane, globalepsilon) == PLANE_SIDE_ON)
+	//	return p;
 	
 	// flip the plane if we followed the back link to get here
 	plane_t plane = node->plane;
@@ -650,7 +650,7 @@ polygon_t *MakeLeafPolygon(bspnode_t *leaf)
 {
 	polygon_t *p = MakeFullPolygon();
 
-	p = ClipPolygonIntoLeafRecursive(p, leaf, NULL);
+	p = ClipPolygonIntoLeafRecursive(p, leaf->parent, leaf);
 
 	return p;
 }
@@ -666,25 +666,64 @@ void BuildLeafPolygons(bsptree_t *tree)
 	{
 		polygon_t *p = MakeLeafPolygon(leaf);
 
-		//fprintf(fp, "color 1 0 0 1\n");
-		float rgb[3];
-		HSVToRGB(rgb, (float)leafnum / tree->numleafs, 1.0f, 1.0f);
-		fprintf(fp, "color %f %f %f 1\n", rgb[0], rgb[1], rgb[2]);
+		if(!p)
+		{
+			printf("leaf was clipped away!\n");
+			continue;
+		}
+
+		{
+			float f = (float)leafnum / tree->numleafs;
+			f *= 10.0f;
+			f = f - floor(f);
+
+			float rgb[3];
+			HSVToRGB(rgb, f, 1.0f, 1.0f);
+			fprintf(fp, "color %f %f %f 1\n", rgb[0], rgb[1], rgb[2]);
+
+			//fprintf(fp, "color 1 0 0 1\n");
+		}
 
 		fprintf(fp, "polyline\n");
 		fprintf(fp, "%i\n", p->numvertices + 1);
 
 		for(int i = 0; i < p->numvertices + 1; i++)
 		{
-			//vec3 v =
-			//	center + (0.95f * (p->polygon->vertices[i % p->polygon->numvertices] - center));
-			vec2 v = p->vertices[i % p->numvertices];
+			vec2 center = Polygon_BoundingBox(p).Center();
+			vec2 v = center + (0.95f * (p->vertices[i % p->numvertices] - center));
+			//vec2 v = p->vertices[i % p->numvertices];
 
 			fprintf(fp, "%f %f 0\n",
 					v[0],
 					v[1]);
 		}
+
 		fflush(fp);
+
+		leafnum++;
+	}
+
+	fclose(fp);
+}
+
+void WriteDebugMap()
+{
+	FILE *fp = fopen("debug_map.gld", "w");
+
+	fprintf(fp, "color 1 1 1 1\n");
+
+	fprintf(fp, "linelist\n");
+	fprintf(fp, "%i\n", numlinedefs);
+	for(int i = 0; i < numlinedefs; i++)
+	{
+		vec2 v[2];
+		v[0][0] = vertices[linedefs[i].vertices[0]][0];
+		v[0][1] = vertices[linedefs[i].vertices[0]][1];
+		v[1][0] = vertices[linedefs[i].vertices[1]][0];
+		v[1][1] = vertices[linedefs[i].vertices[1]][1];
+
+		fprintf(fp, "%f %f 0\n", v[0][0], v[0][1]);
+		fprintf(fp, "%f %f 0\n", v[1][0], v[1][1]);
 	}
 
 	fclose(fp);
@@ -715,7 +754,9 @@ int main(int argc, const char * argv[])
 	printf("numnodes %i\n", tree->numnodes);
 	printf("numleafs %i\n", tree->numleafs);
 
-	//BuildLeafPolygons(tree);
+	BuildLeafPolygons(tree);
+	
+	WriteDebugMap();
 	
 	return 0;
 }

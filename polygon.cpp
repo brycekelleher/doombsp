@@ -230,11 +230,11 @@ void Polygon_SplitWithPlane(polygon_t *in, plane_t plane, float epsilon, polygon
 			// avoid round off error when possible
 			if (plane[j] == 1)
 			{
-				mid[j] = -plane[3];
+				mid[j] = -plane[2];
 			}
 			else if (plane[j] == -1)
 			{
-				mid[j] = plane[3];
+				mid[j] = plane[2];
 			}
 			else
 			{
