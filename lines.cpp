@@ -246,6 +246,7 @@ plane_t Line_Plane(line_t *l)
 typedef struct linedef_s
 {
 	int	vertices[2];
+	int	sidedefs[2];
 
 } linedef_t;
 
@@ -304,6 +305,8 @@ static void DumpLinedefs(int lumpnum)
 
 		linedefs[i].vertices[0] = lptr->vertices[0];
 		linedefs[i].vertices[1] = lptr->vertices[1];
+		linedefs[i].sidedefs[0] = lptr->sidedefs[0];
+		linedefs[i].sidedefs[1] = lptr->sidedefs[1];
 
 		lptr++;
 	}
@@ -339,6 +342,8 @@ typedef struct bspnode_s
 	// the node split plane
 	plane_t			plane;
 	
+	bool			empty;
+
 } bspnode_t;
 
 // tree
@@ -684,14 +689,23 @@ void BuildLeafPolygons(bsptree_t *tree)
 			//fprintf(fp, "color 1 0 0 1\n");
 		}
 
-		fprintf(fp, "polyline\n");
+		if (leaf->empty)
+			fprintf(fp, "polyline\n");
+		else
+			fprintf(fp, "polygon\n");
+
 		fprintf(fp, "%i\n", p->numvertices + 1);
 
 		for(int i = 0; i < p->numvertices + 1; i++)
 		{
-			vec2 center = Polygon_BoundingBox(p).Center();
-			vec2 v = center + (0.95f * (p->vertices[i % p->numvertices] - center));
-			//vec2 v = p->vertices[i % p->numvertices];
+			vec2 v = p->vertices[i % p->numvertices];
+
+#if 0			
+			{
+				vec2 center = Polygon_BoundingBox(p).Center();
+				v = center + (0.95f * (v - center));
+			}
+#endif			
 
 			fprintf(fp, "%f %f 0\n",
 					v[0],
@@ -705,6 +719,87 @@ void BuildLeafPolygons(bsptree_t *tree)
 
 	fclose(fp);
 }
+
+int Sign(float x)
+{
+	if (x == 0.0f)
+		return 0;
+	else
+		return (x > 0.0f ? 1 : -1);
+}
+
+void FilterLineIntoLeaf(bspnode_t *n, line_t *l)
+{
+	if(!n->children[0] && !n->children[1])
+	{
+		//printf("empty leaf!\n");
+
+		// this is a leaf node
+		n->empty = true;
+		return;
+	}
+
+	int side = Line_OnPlaneSide(l, n->plane, globalepsilon);
+
+	if (side == PLANE_SIDE_FRONT)
+	{
+		FilterLineIntoLeaf(n->children[0], l);
+	
+	}
+	else if (side == PLANE_SIDE_BACK)
+	{
+		FilterLineIntoLeaf(n->children[1], l);
+	}
+	else if (side == PLANE_SIDE_ON)
+	{
+		// fixme: could just use sign to index directly into the child nodes?
+		float dot = Dot(n->plane.GetNormal(), Line_GetNormal(l)) ;
+		int s = Sign(dot);
+
+		if (s == 1)
+		{
+			// the planes align so send the line down the front side
+			FilterLineIntoLeaf(n->children[0], l);
+		}
+		else
+		{
+			// the line faces away from the plane so send it down the backside
+			FilterLineIntoLeaf(n->children[1], l);
+		}
+	}
+	else if (side == PLANE_SIDE_CROSS)
+	{
+		line_t *f, *b;
+		Line_SplitWithPlane(l, n->plane, globalepsilon, &f, &b);
+
+		FilterLineIntoLeaf(n, f);
+		FilterLineIntoLeaf(n, b);
+	}
+}
+
+void MarkEmptyLeafs(bsptree_t *tree)
+{
+	// filter all linedefs into the tree
+	for (int i = 0; i < numlinedefs; i++)
+	{
+		for (int j = 0; j < 2; j++)
+		{
+			if (linedefs[i].sidedefs[j] == -1)
+				continue;
+
+			// create a line for this linedef side
+			line_t *line = Line_Alloc();
+			line->v[0][0] = vertices[linedefs[i].vertices[j ^ 0]][0];
+			line->v[0][1] = vertices[linedefs[i].vertices[j ^ 0]][1];
+			line->v[1][0] = vertices[linedefs[i].vertices[j ^ 1]][0];
+			line->v[1][1] = vertices[linedefs[i].vertices[j ^ 1]][1];
+
+			// filter the line into the tree
+			FilterLineIntoLeaf(tree->root, line);
+		}
+	}
+}
+
 
 void WriteDebugMap()
 {
@@ -754,8 +849,10 @@ int main(int argc, const char * argv[])
 	printf("numnodes %i\n", tree->numnodes);
 	printf("numleafs %i\n", tree->numleafs);
 
-	BuildLeafPolygons(tree);
+	MarkEmptyLeafs(tree);
 	
+	BuildLeafPolygons(tree);
+
 	WriteDebugMap();
 	
 	return 0;
