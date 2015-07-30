@@ -679,8 +679,8 @@ void BuildLeafPolygons(bsptree_t *tree)
 
 		{
 			float f = (float)leafnum / tree->numleafs;
-			f *= 10.0f;
-			f = f - floor(f);
+			//f *= 10.0f;
+			//f = f - floor(f);
 
 			float rgb[3];
 			HSVToRGB(rgb, f, 1.0f, 1.0f);
@@ -722,18 +722,15 @@ void BuildLeafPolygons(bsptree_t *tree)
 
 int Sign(float x)
 {
-	if (x == 0.0f)
-		return 0;
-	else
-		return (x > 0.0f ? 1 : -1);
+	return (0.0f < x) - (x < 0.0f);
 }
 
+// if the line sits on the plane then  send the plane down the front or back side depending on whether the line normal
+// faces the same direction as the plane
 void FilterLineIntoLeaf(bspnode_t *n, line_t *l)
 {
 	if(!n->children[0] && !n->children[1])
 	{
-		//printf("empty leaf!\n");
-
 		// this is a leaf node
 		n->empty = true;
 		return;
@@ -742,30 +739,17 @@ void FilterLineIntoLeaf(bspnode_t *n, line_t *l)
 	int side = Line_OnPlaneSide(l, n->plane, globalepsilon);
 
 	if (side == PLANE_SIDE_FRONT)
-	{
 		FilterLineIntoLeaf(n->children[0], l);
-	
-	}
 	else if (side == PLANE_SIDE_BACK)
-	{
 		FilterLineIntoLeaf(n->children[1], l);
-	}
 	else if (side == PLANE_SIDE_ON)
 	{
-		// fixme: could just use sign to index directly into the child nodes?
-		float dot = Dot(n->plane.GetNormal(), Line_GetNormal(l)) ;
-		int s = Sign(dot);
+		float dot = Dot(n->plane.GetNormal(), Line_GetNormal(l));
 
-		if (s == 1)
-		{
-			// the planes align so send the line down the front side
-			FilterLineIntoLeaf(n->children[0], l);
-		}
-		else
-		{
-			// the line faces away from the plane so send it down the backside
-			FilterLineIntoLeaf(n->children[1], l);
-		}
+		// map 1 to the front child and -1 to the back child
+		int facing = (-Sign(dot)) ^ 1;
+
+		FilterLineIntoLeaf(n->children[facing], l);
 	}
 	else if (side == PLANE_SIDE_CROSS)
 	{
