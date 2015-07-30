@@ -747,7 +747,7 @@ void FilterLineIntoLeaf(bspnode_t *n, line_t *l)
 		float dot = Dot(n->plane.GetNormal(), Line_GetNormal(l));
 
 		// map 1 to the front child and -1 to the back child
-		int facing = (-Sign(dot)) ^ 1;
+		int facing = (dot > 0.0f ? 0 : 1);
 
 		FilterLineIntoLeaf(n->children[facing], l);
 	}
