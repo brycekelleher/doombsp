@@ -52,7 +52,7 @@ void *Malloc(int numbytes)
 	
 	mem = malloc(numbytes);
 
-	if(!mem)
+	if (!mem)
 	{
 		Error("Malloc: Failed to allocated memory");
 	}
@@ -268,7 +268,7 @@ static void DumpVertices(int lumpnum)
 
 	short *fixedptr		= (short*)data;
 
-	for(int i = 0; i < numvertices; i++)
+	for (int i = 0; i < numvertices; i++)
 	{
 		float xy[2];
 
@@ -296,7 +296,7 @@ static void DumpLinedefs(int lumpnum)
 
 	dlinedef_t *lptr	= (dlinedef_t*)data;
 
-	for(int i = 0; i < numlinedefs; i++)
+	for (int i = 0; i < numlinedefs; i++)
 	{
 		//printf("linedefs %4i:", i);
 		//printf("\n\tvertices (%i %i)", lptr->vertices[0], lptr->vertices[1]);
@@ -316,7 +316,7 @@ static void DumpMapData(const char *mapname)
 {
 	int baselump = Doom_LumpNumFromName(mapname);
 
-	if(baselump < 0 || Doom_LumpLength(baselump) != 0)
+	if (baselump < 0 || Doom_LumpLength(baselump) != 0)
 	{
 		Error("Map \"%s\" not found\n", mapname);
 		exit(-1);
@@ -439,15 +439,15 @@ static int CalculateSplitPlaneScore(plane_t plane, bspline_t *list)
 {
 	int score = 0;
 	
-	for(; list; list = list->next)
+	for (; list; list = list->next)
 	{
 		// favour polygons that don't cause splits
 		int side = Line_OnPlaneSide(list->line, plane, globalepsilon);
-		if(side != PLANE_SIDE_CROSS)
+		if (side != PLANE_SIDE_CROSS)
 			score += 1;
 		
 		// favour planes which are axial
-		//if(plane.IsAxial())
+		//if (plane.IsAxial())
 		//	score += 1;
 	}
 	
@@ -460,12 +460,12 @@ static plane_t SelectSplitPlane(bspline_t *list)
 	plane_t bestplane;
 	bspline_t *l;
 	
-	for(l = list; l; l = l->next)
+	for (l = list; l; l = l->next)
 	{
 		plane_t plane = Line_Plane(l->line);
 		int score = CalculateSplitPlaneScore(plane, list);
 	
-		if(!bestscore || score > bestscore)
+		if (!bestscore || score > bestscore)
 		{
 			bestscore	= score;
 			bestplane	= plane;
@@ -481,7 +481,7 @@ static void PartitionLineList(plane_t plane, bspline_t *list, bspline_t **sides)
 	sides[0] = NULL;
 	sides[1] = NULL;
 	
-	for(; list; list = list->next)
+	for (; list; list = list->next)
 	{
 		bspline_t *split[2];
 		int i;
@@ -489,9 +489,9 @@ static void PartitionLineList(plane_t plane, bspline_t *list, bspline_t **sides)
 		SplitLine(plane, list, globalepsilon, &split[0], &split[1]);
 
 		// process the front (0) and back (1) splits
-		for(i = 0; i < 2; i++)
+		for (i = 0; i < 2; i++)
 		{
-			if(split[i])
+			if (split[i])
 			{
 				split[i]->next = sides[i];
 				sides[i] = split[i];
@@ -533,7 +533,7 @@ bspline_t *MakeLineList()
 {
 	bspline_t *list = NULL;
 
-	for(int i = 0; i < numlinedefs; i++)
+	for (int i = 0; i < numlinedefs; i++)
 	{
 		line_t *line = Line_Alloc();
 
@@ -667,11 +667,11 @@ void BuildLeafPolygons(bsptree_t *tree)
 	FILE *fp = fopen("leaf_polygons.gld", "w");
 
 	int leafnum = 0;
-	for(leaf = tree->leafs; leaf; leaf = leaf->leafnext)
+	for (leaf = tree->leafs; leaf; leaf = leaf->leafnext)
 	{
 		polygon_t *p = MakeLeafPolygon(leaf);
 
-		if(!p)
+		if (!p)
 		{
 			printf("leaf was clipped away!\n");
 			continue;
@@ -696,7 +696,7 @@ void BuildLeafPolygons(bsptree_t *tree)
 
 		fprintf(fp, "%i\n", p->numvertices + 1);
 
-		for(int i = 0; i < p->numvertices + 1; i++)
+		for (int i = 0; i < p->numvertices + 1; i++)
 		{
 			vec2 v = p->vertices[i % p->numvertices];
 
@@ -729,7 +729,7 @@ int Sign(float x)
 // faces the same direction as the plane
 void FilterLineIntoLeaf(bspnode_t *n, line_t *l)
 {
-	if(!n->children[0] && !n->children[1])
+	if (!n->children[0] && !n->children[1])
 	{
 		// this is a leaf node
 		n->empty = true;
@@ -793,7 +793,7 @@ void WriteDebugMap()
 
 	fprintf(fp, "linelist\n");
 	fprintf(fp, "%i\n", numlinedefs);
-	for(int i = 0; i < numlinedefs; i++)
+	for (int i = 0; i < numlinedefs; i++)
 	{
 		vec2 v[2];
 		v[0][0] = vertices[linedefs[i].vertices[0]][0];
@@ -815,7 +815,7 @@ static void PrintUsage()
 
 int main(int argc, const char * argv[])
 {
-	if(argc == 1)
+	if (argc == 1)
 	{
 		PrintUsage();
 		exit(0);
