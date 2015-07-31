@@ -684,10 +684,15 @@ void BuildLeafPolygons(bsptree_t *tree)
 
 			float rgb[3];
 			HSVToRGB(rgb, f, 1.0f, 1.0f);
-			fprintf(fp, "color %f %f %f 1\n", rgb[0], rgb[1], rgb[2]);
+			float grey = (0.33f * rgb[0]) + (0.33f * rgb[1]) + (0.33f * rgb[2]);
+			//fprintf(fp, "color %f %f %f 1\n", rgb[0], rgb[1], rgb[2]);
+			fprintf(fp, "color %f %f %f 1\n", grey, grey, grey);
 
 			//fprintf(fp, "color 1 0 0 1\n");
 		}
+	
+		//if(leaf->empty)
+		//	continue;
 
 		if (leaf->empty)
 			fprintf(fp, "polyline\n");
@@ -808,6 +813,93 @@ void WriteDebugMap()
 	fclose(fp);
 }
 
+static FILE * fplineq;
+static bspnode_t *lineq;
+void WriteCross(FILE *fp, vec2 x)
+{
+	float xy[4][2];
+	float s = 32.0f;
+
+	xy[0][0] = x[0] - s;
+	xy[0][1] = x[1];
+	xy[1][0] = x[0] + s;
+	xy[1][1] = x[1];
+
+	xy[2][0] = x[0];
+	xy[2][1] = x[1] - s;
+	xy[3][0] = x[0];
+	xy[3][1] = x[1] + s;
+
+	fprintf(fp, "color 1 0 0\n");
+	fprintf(fp, "line\n");
+	fprintf(fp, "%f %f 1\n", xy[0][0], xy[0][1]);
+	fprintf(fp, "%f %f 1\n", xy[1][0], xy[1][1]);
+	fprintf(fp, "line\n");
+	fprintf(fp, "%f %f 1\n", xy[2][0], xy[2][1]);
+	fprintf(fp, "%f %f 1\n", xy[3][0], xy[3][1]);
+}
+
+void LineQueryRecursive(bspnode_t *n, line_t *line)
+{
+	if (!n->children[0] && !n->children[1])
+	{
+		// are we going from empty to solid or solid to empty?
+		if (lineq) // && (n->empty ^ lineq->empty))
+		{
+			printf("hit point at %f, %f\n", line->v[0][0], line->v[0][1]);
+			WriteCross(fplineq, line->v[0]);
+		}
+
+		lineq = n;
+		return;
+	}
+
+	int side = Line_OnPlaneSide(line, n->plane, globalepsilon);
+
+	if (side == PLANE_SIDE_FRONT)
+		LineQueryRecursive(n->children[0], line);
+	else if (side == PLANE_SIDE_BACK)
+		LineQueryRecursive(n->children[1], line);
+	else if (side == PLANE_SIDE_CROSS)
+	{
+		line_t *f, *b;
+		Line_SplitWithPlane(line, n->plane, globalepsilon, &f, &b);
+
+		side = n->plane.PointOnPlaneSide(line->v[0], globalepsilon);
+		if(side == PLANE_SIDE_FRONT)
+		{
+			LineQueryRecursive(n->children[0], f);
+			LineQueryRecursive(n->children[1], b);
+		}
+		else
+		{
+			LineQueryRecursive(n->children[1], b);
+			LineQueryRecursive(n->children[0], f);
+		}
+	}
+	else if (side == PLANE_SIDE_ON)
+	{
+		// hmmm	
+		LineQueryRecursive(n->children[0], line);
+	}
+}
+
+static void LineQuery(bsptree_t *tree)
+{
+	fplineq = fopen("lineq.gld", "w");
+
+	line_t *l = Line_Alloc();
+	l->v[0][0] = 0.0f;
+	l->v[0][1] = 0.0f;
+	l->v[1][0] = 4096.0f;
+	l->v[1][1] = 4096.0f;
+
+	lineq = NULL;
+	LineQueryRecursive(tree->root, l);
+
+	fclose(fplineq);
+}
+
 static void PrintUsage()
 {
 	printf("dumplvl <wadfile> <mapname>\n");
@@ -839,6 +931,8 @@ int main(int argc, const char * argv[])
 
 	WriteDebugMap();
 	
+	LineQuery(tree);
+
 	return 0;
 }
 
