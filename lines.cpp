@@ -690,6 +690,9 @@ void BuildLeafPolygons(bsptree_t *tree)
 		}
 
 		if (leaf->empty)
+			continue;
+
+		if (leaf->empty)
 			fprintf(fp, "polyline\n");
 		else
 			fprintf(fp, "polygon\n");
@@ -808,16 +811,11 @@ void WriteDebugMap()
 	fclose(fp);
 }
 
-static void PrintUsage()
-{
-	printf("dumplvl <wadfile> <mapname>\n");
-}
-
 int main(int argc, const char * argv[])
 {
-	if (argc == 1)
+	if (argc < 3)
 	{
-		PrintUsage();
+		printf("lines <wadfile> <mapname>\n");
 		exit(0);
 	}
 
